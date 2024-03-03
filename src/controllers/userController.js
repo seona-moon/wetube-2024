@@ -1,5 +1,6 @@
 import User from "../models/User";
 import bcrypt from "bcrypt";
+import fetch from "node-fetch";
 
 export const getJoin = (req, res) =>
   res.render("join", { pageTitle: "Create Account" });
@@ -42,7 +43,7 @@ export const getLogin = (req, res) =>
 export const postLogin = async (req, res) => {
   const { username, password } = req.body;
   const pageTitle = "Login";
-  const user = await User.findOne({ username });
+  const user = await User.findOne({ username, socialOnly: false });
   // 1. 계정이 존재하는지 확인 (존재하지 않으면 에러)
   if (!user) {
     return res.status(400).render("login", {
@@ -64,7 +65,97 @@ export const postLogin = async (req, res) => {
   res.redirect("/");
 };
 
+//유저를 Github로 리다이렉션
+export const startGithubLogin = (req, res) => {
+  const config = {
+    client_id: process.env.GH_CLIENT,
+    allow_signup: false,
+    scope: "read:user user:email",
+  };
+
+  const baseURL = `https://github.com/login/oauth/authorize`;
+  const params = new URLSearchParams(config).toString();
+
+  const finalURL = `${baseURL}?${params}`;
+  return res.redirect(finalURL);
+};
+
+export const finishGithubLogin = async (req, res) => {
+  const baseURL = `https://github.com/login/oauth/access_token`;
+  const config = {
+    client_id: process.env.GH_CLIENT,
+    client_secret: process.env.GH_SECRET,
+    code: req.query.code,
+  };
+  const params = new URLSearchParams(config).toString();
+  const finalURL = `${baseURL}?${params}`;
+  // fetch를 통해 POST 요청 후, 데이터를 받아온다.
+  const tokenRequest = await (
+    await fetch(finalURL, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+      },
+    })
+  ).json();
+  //console.log(tokenRequest);
+
+  if ("access_token" in tokenRequest) {
+    // 만약 access_token을 제대로 받아왔다면, 해당 토큰으로 github API요청을 한다.
+    const { access_token } = tokenRequest;
+    const apiURL = "https://api.github.com";
+    const userData = await (
+      await fetch(`${apiURL}/user`, {
+        headers: {
+          Authorization: `token ${access_token}`,
+        },
+      })
+    ).json();
+    const emailData = await (
+      await fetch(`${apiURL}/user/emails`, {
+        headers: {
+          Authorization: `token ${access_token}`,
+        },
+      })
+    ).json();
+    console.log(userData);
+    //console.log(emailData);
+    const emailObj = emailData.find(
+      (email) => email.primary === true && email.verified === true
+    );
+    if (!emailObj) {
+      // 적합한 이메일에 접근할 수 없음
+      return res.redirect("/login");
+    }
+    // 이제 적합한 유저 데이터와 이메일을 다 보유한 상태.
+    // 먼저, 해당 깃허브 이메일의 유저가 데이터베이스에 존재하는지 확인하자.
+    let user = await User.findOne({ email: emailObj.email });
+    if (!user) {
+      // 만약 유저 데이터베이스에 해당 이메일을 가진 객체가 없다면 ? 비밀번호 없이 계정을 만든다.
+      user = await User.create({
+        name: userData.name,
+        avatarUrl: userData.avatar_url,
+        socialOnly: true,
+        username: userData.login,
+        email: emailObj.email,
+        password: "",
+        location: userData.location,
+      });
+    }
+    // 해당 세션에 로그인하자!
+    req.session.loggedIn = true;
+    req.session.user = user;
+    return res.redirect("/");
+  } else {
+    // not accept access token
+    return res.redirect("/login");
+  }
+};
+
+export const logout = (req, res) => {
+  req.session.destroy();
+  return res.redirect("/");
+};
+
 export const edit = (req, res) => res.send("Edit User");
-export const remove = (req, res) => res.send("Remove User");
-export const logout = (req, res) => res.send("Logout");
 export const see = (req, res) => res.send("See User");
