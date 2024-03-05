@@ -118,7 +118,7 @@ export const finishGithubLogin = async (req, res) => {
         },
       })
     ).json();
-    console.log(userData);
+    //console.log(userData);
     //console.log(emailData);
     const emailObj = emailData.find(
       (email) => email.primary === true && email.verified === true
@@ -157,5 +157,91 @@ export const logout = (req, res) => {
   return res.redirect("/");
 };
 
-export const edit = (req, res) => res.send("Edit User");
+export const getEdit = (req, res) => {
+  return res.render("edit-profile", { pageTitle: "Edit Profile" });
+};
+
+export const postEdit = async (req, res) => {
+  // 세션에서 유저의 아이디를 얻고, 바디에서 필요한 정보를 가져온다. (한번에 처리 가능)
+  const {
+    session: {
+      user: { _id, avatarUrl, email: sessionEmail, username: sessionUsername },
+    },
+    body: { name, email, username, location },
+    file,
+  } = req;
+
+  // 만약 현재 unique한 영역인 유저 네임이나 이메일이 변경중이라면?
+  if (username !== sessionUsername || email !== sessionEmail) {
+    // 현재 해당 계정을 사용하고 있는 유저가 있는지 확인해본다.
+    const exist = await User.exists({ $or: [{ username }, { email }] });
+    if (exist) {
+      // 만약 존재한다면? 해당 계정으로 수정할 수 없다.
+      return res.status(400).render("edit-profile", {
+        pageTitle: "Edit Profile",
+        errorMessage: "This username/email is already taken..!",
+      });
+    }
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(
+    _id,
+    {
+      avatarUrl: file ? file.path : avatarUrl, //만약 file이 undefined이라면 유지. 존재한다면 path 업데이트
+      name,
+      email,
+      username,
+      location,
+    },
+    { new: true }
+  );
+  // 세션의 유저도 업데이트한다.
+  req.session.user = updatedUser;
+  return res.redirect("/users/edit");
+};
+
+export const getChangePassword = (req, res) => {
+  if (req.session.user.socialOnly == true) {
+    return res.redirect("/");
+  }
+  return res.render("users/change-password", { pageTitle: "Change password" });
+};
+
+export const postChangePassword = async (req, res) => {
+  const {
+    session: {
+      user: { _id },
+    },
+    body: { oldPassword, newPassword, newPasswordConfirm },
+  } = req;
+  const user = await User.findById(_id);
+
+  // 기존 비밀번호가 정확한지 확인
+  const ok = await bcrypt.compare(oldPassword, user.password);
+  if (!ok) {
+    return res.status(400).render("users/change-password", {
+      pageTitle: "Change Password",
+      errorMessage: "The current password is incorrect",
+    });
+  }
+
+  // 패스워드가 일치하는지 확인
+  if (newPassword !== newPasswordConfirm) {
+    return res.status(400).render("users/change-password", {
+      pageTitle: "Change Password",
+      errorMessage: "The password does not match the confirmation",
+    });
+  }
+
+  // 기존 패스워드와 동일하다면 비밀번호 변경
+  user.password = newPassword;
+  await user.save(); // save를 통해 암호화 된 데이터로 변환.
+
+  // 변환된 데이터를 세션에 업데이트.
+  req.session.user.password = user.password;
+
+  // send notification
+  return res.redirect("/");
+};
+
 export const see = (req, res) => res.send("See User");
