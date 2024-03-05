@@ -1,63 +1,73 @@
 import Video from "../models/Video";
 import User from "../models/User";
-
 export const home = async (req, res) => {
-  const videos = await Video.find().sort({ createdAt: "desc" });
-  //console.log(videos);
-  return res.render("home", { pageTitle: "Home", videos: videos });
+  const videos = await Video.find({}).sort({ createdAt: "desc" });
+  return res.render("home", { pageTitle: "Home", videos });
 };
-
 export const watch = async (req, res) => {
   const { id } = req.params;
-  const video = await Video.findById(id);
-  const owner = await User.findById(video.owner);
-  if (video === null) {
+  const video = await Video.findById(id).populate("owner");
+  if (!video) {
     return res.render("404", { pageTitle: "Video not found." });
   }
-  return res.render("watch", { pageTitle: video.title, video, owner });
+  return res.render("watch", { pageTitle: video.title, video });
 };
-
 export const getEdit = async (req, res) => {
   const { id } = req.params;
+  const {
+    user: { _id },
+  } = req.session;
+
   const video = await Video.findById(id);
-  if (video === null) {
+  if (!video) {
     return res.status(404).render("404", { pageTitle: "Video not found." });
   }
-  return res.render("edit", { pageTitle: `Editing ${video.title}`, video });
+  if (String(video.owner) !== _id) {
+    // video.owner는 Object 타입이기 때문에, String으로 변경해야 한다.
+    return res.status(403).redirect("/");
+  }
+  return res.render("edit", { pageTitle: `Edit: ${video.title}`, video });
 };
-
 export const postEdit = async (req, res) => {
   const { id } = req.params;
-  const { title, description, hashtags } = req.body; //POST로부터 데이터를 받아옴
-  if (!Video.exists({ _id: id })) {
+  const {
+    user: { _id },
+  } = req.session;
+  const { title, description, hashtags } = req.body;
+  const video = await Video.findById(id);
+  if (!video) {
     return res.status(404).render("404", { pageTitle: "Video not found." });
+  }
+  if (String(video.owner) !== _id) {
+    return res.status(403).redirect("/");
   }
   await Video.findByIdAndUpdate(id, {
     title,
     description,
     hashtags: Video.formatHashtags(hashtags),
   });
-  return res.redirect(`/videos/${id}`); //이전 페이지로 이동.
+  return res.redirect(`/videos/${id}`);
 };
-
 export const getUpload = (req, res) => {
   return res.render("upload", { pageTitle: "Upload Video" });
 };
-
 export const postUpload = async (req, res) => {
   const {
     user: { _id },
-  } = req.session; // 현재 업로드하는 유저의 아이디 (not body!!!)
+  } = req.session;
   const { path: fileUrl } = req.file;
   const { title, description, hashtags } = req.body;
   try {
-    await Video.create({
+    const newVideo = await Video.create({
       title,
       description,
       fileUrl,
       owner: _id,
       hashtags: Video.formatHashtags(hashtags),
     });
+    const user = await User.findById(_id);
+    user.videos.push(newVideo._id);
+    user.save();
     return res.redirect("/");
   } catch (error) {
     console.log(error);
@@ -67,11 +77,24 @@ export const postUpload = async (req, res) => {
     });
   }
 };
-
 export const deleteVideo = async (req, res) => {
   const { id } = req.params;
-  //console.log(id);
+  const {
+    user: { _id },
+  } = req.session;
+
+  const video = await Video.findById(id);
+  const user = await User.findById(_id);
+  if (!video) {
+    return res.status(404).render("404", { pageTitle: "Video not found." });
+  }
+
+  if (String(video.owner) !== _id) {
+    return res.status(403).redirect("/");
+  }
   await Video.findByIdAndDelete(id);
+  user.videos.splice(user.videos.indexOf(id), 1); //유저의 videos의 정보 삭제! (index 사용)
+  user.save();
   return res.redirect("/");
 };
 
@@ -79,7 +102,11 @@ export const search = async (req, res) => {
   const { keyword } = req.query;
   let videos = [];
   if (keyword) {
-    videos = await Video.find({ title: { $regex: new RegExp(keyword, "i") } });
+    videos = await Video.find({
+      title: {
+        $regex: new RegExp(`${keyword}$`, "i"),
+      },
+    });
   }
   return res.render("search", { pageTitle: "Search", videos });
 };

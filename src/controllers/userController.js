@@ -1,9 +1,11 @@
 import User from "../models/User";
+import Video from "../models/Video";
 import bcrypt from "bcrypt";
 import fetch from "node-fetch";
 
 export const getJoin = (req, res) =>
   res.render("join", { pageTitle: "Create Account" });
+
 export const postJoin = async (req, res) => {
   const { name, username, email, password, password2, location } = req.body;
   const pageTitle = "Join";
@@ -37,6 +39,7 @@ export const postJoin = async (req, res) => {
     });
   }
 };
+
 export const getLogin = (req, res) =>
   res.render("login", { pageTitle: "Login" });
 
@@ -246,10 +249,18 @@ export const postChangePassword = async (req, res) => {
 
 export const see = async (req, res) => {
   const { id } = req.params;
-  const user = await User.findById(id);
+  //const user = await User.findById(id).populate("videos");
+
+  // 동영상을 날짜 순으로 내림차순 (최신순) 정렬한다.
+  const user = await User.findById(id).populate({
+    path: "videos",
+    options: { sort: { createdAt: "desc" } },
+  });
+
   if (!user) {
     return res.status(404).render("404", { pageTitle: "User not found." });
   }
+
   return res.render("users/profile", {
     pageTitle: `${user.name}'s Profile`,
     user,
