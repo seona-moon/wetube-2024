@@ -1,6 +1,6 @@
 // Components
 
-@import "./config/variables";
+@import "./config/_variables";
 @import "./components/header.scss";
 @import "./components/footer.scss";
 @import "./components/video.scss";
@@ -13,6 +13,7 @@
 @import "./screens/search.scss";
 @import "./screens/profile.scss";
 @import "./screens/edit-profile.scss";
+@import "./screens/home.scss";
 
 // Defaults
 a {
