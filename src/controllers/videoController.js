@@ -1,11 +1,14 @@
 import Video from "../models/Video";
 import User from "../models/User";
+
 export const home = async (req, res) => {
   const videos = await Video.find({})
     .sort({ createdAt: "desc" })
     .populate("owner");
+  console.log(req.session.user);
   return res.render("home", { pageTitle: "Home", videos });
 };
+
 export const watch = async (req, res) => {
   const { id } = req.params;
   const video = await Video.findById(id).populate("owner");
