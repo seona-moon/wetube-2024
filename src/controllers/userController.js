@@ -148,6 +148,7 @@ export const finishGithubLogin = async (req, res) => {
     // 해당 세션에 로그인하자!
     req.session.loggedIn = true;
     req.session.user = user;
+    console.log("Login success!");
     return res.redirect("/");
   } else {
     // not accept access token
