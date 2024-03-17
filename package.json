@@ -8,7 +8,11 @@
   },
   "scripts": {
     "dev:server": "nodemon --exec babel-node src/init.js",
-    "dev:assets": "rimraf assets && webpack"
+    "dev:assets": "rimraf assets && webpack --mode=development -w",
+    "build:server": "babel src -d build",
+    "build:assets": "rimraf assets && webpack --mode=development",
+    "build": "npm run build:server && npm run build:assets",
+    "start": "node build/init.js"
   },
   "author": "Seoyoung Moon",
   "license": "ISC",
@@ -30,7 +34,8 @@
     "pug": "^3.0.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.23.9",
+    "@babel/cli": "^7.23.9",
+    "@babel/core": "^7.24.0",
     "@babel/node": "^7.23.9",
     "@babel/preset-env": "^7.23.9",
     "@prettier/plugin-pug": "^3.0.0",
